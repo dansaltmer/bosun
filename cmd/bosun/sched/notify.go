@@ -11,6 +11,7 @@ import (
 	"bosun.org/cmd/bosun/conf"
 	"bosun.org/models"
 	"bosun.org/slog"
+	"bosun.org/cmd/bosun/cache"
 )
 
 func (s *Schedule) dispatchNotifications() {
@@ -214,7 +215,11 @@ func (s *Schedule) notify(st *models.IncidentState, rt *models.RenderedTemplates
 	if len(rt.EmailBody) == 0 {
 		rt.EmailBody = []byte(rt.Body)
 	}
-	n.Notify(st.Subject, rt.Body, rt.EmailSubject, rt.EmailBody, s.SystemConf, string(st.AlertKey), rt.Attachments...)
+
+	alert := s.RuleConf.GetAlert(st.AlertKey.Name())
+	ctx := s.Data(s.NewRunHistory(st.Start, cache.New(0)), st, alert, len(n.Email) > 0)
+
+	n.Notify(ctx, st.Subject, rt.Body, rt.EmailSubject, rt.EmailBody, s.SystemConf, string(st.AlertKey), rt.Attachments...)
 }
 
 // utnotify is single notification for N unknown groups into a single notification
@@ -237,7 +242,10 @@ func (s *Schedule) utnotify(groups map[string]models.AlertKeys, n *conf.Notifica
 	}); err != nil {
 		slog.Errorln(err)
 	}
-	n.Notify(subject, body.String(), []byte(subject), body.Bytes(), s.SystemConf, "unknown_treshold")
+
+	ctx := s.Data(s.NewRunHistory(time.Now(), cache.New(0)), nil, nil, len(n.Email) > 0)
+
+	n.Notify(ctx, subject, body.String(), []byte(subject), body.Bytes(), s.SystemConf, "unknown_treshold")
 }
 
 var defaultUnknownTemplate = &conf.Template{
@@ -272,7 +280,11 @@ func (s *Schedule) unotify(name string, group models.AlertKeys, n *conf.Notifica
 			slog.Infoln("unknown template error:", err)
 		}
 	}
-	n.Notify(subject.String(), body.String(), subject.Bytes(), body.Bytes(), s.SystemConf, name)
+
+	alert := s.RuleConf.GetAlert(group[0].Name())
+	ctx := s.Data(s.NewRunHistory(time.Now(), cache.New(0)), nil, alert, len(n.Email) > 0)
+
+	n.Notify(ctx, subject.String(), body.String(), subject.Bytes(), body.Bytes(), s.SystemConf, name)
 }
 
 func (s *Schedule) QueueNotification(ak models.AlertKey, n *conf.Notification, started time.Time) error {
@@ -328,7 +340,11 @@ func (s *Schedule) ActionNotify(at models.ActionType, user, message string, aks 
 			slog.Error("Error rendering action notification body", err)
 		}
 
-		notification.Notify(subject, buf.String(), []byte(subject), buf.Bytes(), s.SystemConf, "actionNotification")
+		alert := s.RuleConf.GetAlert(incidents[0].AlertKey.Name())
+		ctx := s.Data(s.NewRunHistory(incidents[0].Start, cache.New(0)),
+			incidents[0], alert, len(notification.Email) > 0)
+
+		notification.Notify(ctx, subject, buf.String(), []byte(subject), buf.Bytes(), s.SystemConf, "actionNotification")
 	}
 	return nil
 }

@@ -28,12 +28,12 @@ func init() {
 		"The number of email notifications that Bosun failed to send.")
 }
 
-func (n *Notification) Notify(subject, body string, emailsubject, emailbody []byte, c SystemConfProvider, ak string, attachments ...*models.Attachment) {
+func (n *Notification) Notify(ctx interface{}, subject, body string, emailsubject, emailbody []byte, c SystemConfProvider, ak string, attachments ...*models.Attachment) {
 	if len(n.Email) > 0 {
 		go n.DoEmail(emailsubject, emailbody, c, ak, attachments...)
 	}
 	if n.Post != nil {
-		go n.DoPost(n.GetPayload(subject, body), ak)
+		go n.DoPost(n.GetPayload(subject, body), ctx, ak)
 	}
 	if n.Get != nil {
 		go n.DoGet(ak)
@@ -59,10 +59,10 @@ func (n *Notification) DoPrint(payload string) {
 	slog.Infoln(payload)
 }
 
-func (n *Notification) DoPost(payload []byte, ak string) {
+func (n *Notification) DoPost(payload []byte, ctx interface{}, ak string) {
 	if n.Body != nil {
 		buf := new(bytes.Buffer)
-		if err := n.Body.Execute(buf, string(payload)); err != nil {
+		if err := n.Body.Execute(buf, ctx); err != nil {
 			slog.Errorln(err)
 			return
 		}
